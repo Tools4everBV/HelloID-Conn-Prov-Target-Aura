@@ -106,13 +106,11 @@ function ConvertTo-ChallengeResponseCode {
         $challengeResult
     )
     try {
-        $bstrPassword = [System.Runtime.InteropServices.Marshal]::StringToBSTR($config.password)
         $shaobj = [System.Security.Cryptography.SHA1CryptoServiceProvider]::new()
         $shaObj.Initialize();
 
         $encoder = [System.Text.ASCIIEncoding]::new()
-        $hash = $shaObj.ComputeHash($encoder.GetBytes($challengeResult + "tools4ever" + [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstrPassword)))
-        [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstrPassword)
+        $hash = $shaObj.ComputeHash($encoder.GetBytes($challengeResult + "tools4ever" + $config.password))
 
         $shaobj.Clear()
         $challengeResponseCode = [System.String]::Concat(($hash | ForEach-Object {
