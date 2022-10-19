@@ -215,7 +215,7 @@ function Resolve-AuraError {
         if ($ErrorObject.Exception.GetType().FullName -eq 'System.Net.WebException') {
             if ($ErrorObject.ErrorDetails) {
                 $httpErrorObj.ErrorDetails = $ErrorObject.ErrorDetails
-                $httpErrorObj.FriendlyMessage = ($ErrorObject.ErrorDetails.message -split [System.Environment]::NewLine)[-1]
+                $httpErrorObj.FriendlyMessage = ($ErrorObject.ErrorDetails.Message.Substring($ErrorObject.ErrorDetails.Message.IndexOf(';') + 2)) -replace ('---\u0026gt;', ';')
             } elseif ($null -eq $ErrorObject.Exception.Response) {
                 $httpErrorObj.ErrorDetails = $ErrorObject.Exception.Message
                 if ($ErrorObject.ErrorDetails) {
