@@ -47,8 +47,6 @@ The following settings are required to connect to the API.
 - The properties which are not sent to the webservice are not updated. When a property is sent without a value the value will be cleared in Aura.
 - You must disable a user account with the property address.extadd (room number) with an endDate [yyyyMMdd]. If the value not contains a valid date the room number will be updated
 - There are no Enable or Delete tasks
-- The connector is created for PS 5.1 and core 7.1. But there are some .net objects under investigation for our cloud agent. In the meantime the connector only works on the agent.
-
 
 #### Creation / correlation process
 
