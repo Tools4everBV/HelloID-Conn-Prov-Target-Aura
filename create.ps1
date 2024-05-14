@@ -1,103 +1,13 @@
-#####################################################
+#################################################
 # HelloID-Conn-Prov-Target-Aura-Create
-#
-# Version: 1.0.0
-#####################################################
-# Initialize default values
-$config = $configuration | ConvertFrom-Json
-$p = $person | ConvertFrom-Json
-$success = $false
-$auditLogs = [System.Collections.Generic.List[PSCustomObject]]::new()
-
-# Account mapping
-$account = [PSCustomObject]@{
-    address         = @{
-        country  = 'nl'
-        extadd   = ''
-        locality = ''
-        pobox    = ''
-        postcode = '1234ac'
-        region   = ''
-        street   = 'Tools'
-    }
-    dataSource      = 'Aura Software'
-    demographics    = @{
-        gender = 'Male'  # female
-        bday   = '2000-01-02'  # yyyy-mm-dd
-    }
-    email           = $p.Contact.Business.Email
-    formatName      = ''
-    name            = @(
-        @{
-            nameType = 'Full'
-        },
-        @{
-            partName = @{
-                namePartType  = 'First'
-                namePartValue = $p.Name.NickName
-            }
-        },
-        @{
-            partName = @{
-                namePartType  = 'Middle'
-                namePartValue = $null
-            }
-        },
-        @{
-            partName = @{
-                namePartType  = 'Last'
-                namePartValue = $p.Name.FamilyName
-            }
-        }
-    )
-    systemRole      = 'User' # SysAdmin, SysSupport, Creator,AccountAdmin,User,Administrator,None,
-    userId          = @{
-        authenticationType = ''
-        passWord           = '$3Cret'  # Only used for new created account
-        pwEncryptionType   = ''
-        userIdType         = ''
-        userIdValue        = $p.ExternalId
-    }
-    institutionRole = @(
-        @{
-            InstitutionRoleDType = @{
-                # Student,  Faculty,  Member,  Learner,  Instructor,  Mentor,  Staff,  Alumni,  ProspectiveStudent,  Guest,  Other,  iAdministrator,  Observer,
-                institutionRoleType_ = ''
-                primaryRoleType      = ''
-            }
-        }
-    )
-    extension       = @(
-        @{
-            extensionField = @{ #extensionField
-                fieldName  = 'rentalcode'
-                fieldType  = 'String'
-                fieldValue = 700
-            }
-        },
-        @{
-            extensionField = @{
-                fieldName  = 'vestiging'
-                fieldType  = 'String'
-                fieldValue = ''
-            }
-        }
-    )
-}
+# PowerShell V2
+#################################################
 
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
 
-# Set debug logging
-switch ($($config.IsDebug)) {
-    $true { $VerbosePreference = 'Continue' }
-    $false { $VerbosePreference = 'SilentlyContinue' }
-}
-
-# Set to true if accounts in the target system must be updated
-$updatePerson = $true
-
 #region functions
+
 function ConvertTo-ChallengeResponseCode {
     [OutputType([System.String])]
     [CmdletBinding()]
@@ -110,7 +20,7 @@ function ConvertTo-ChallengeResponseCode {
         $shaObj.Initialize();
 
         $encoder = [System.Text.ASCIIEncoding]::new()
-        $hash = $shaObj.ComputeHash($encoder.GetBytes($challengeResult + "tools4ever" + $config.password))
+        $hash = $shaObj.ComputeHash($encoder.GetBytes($challengeResult + "tools4ever" + $actionContext.Configuration.password))
 
         $shaobj.Clear()
         $challengeResponseCode = [System.String]::Concat(($hash | ForEach-Object {
@@ -136,7 +46,7 @@ function Add-CookieToWebRequestSession {
         if ([string]::IsNullOrWhiteSpace($CookieNameValue)) {
             throw 'Cookie Not Found, Please check you password'
         }
-        $uri = [system.uri]::new($config.BaseUrl)
+        $uri = [system.uri]::new($actionContext.Configuration.BaseUrl)
 
         $Cookie = [System.Net.Cookie]::new()
         $Cookie.Name = ($CookieNameValue -split '=') | Select-Object -First 1
@@ -167,7 +77,7 @@ function Get-AuraAuthenticationCookie {
 
         $splatWebRequest = @{
             Method      = 'POST'
-            Uri         = $config.BaseUrl
+            Uri         = $actionContext.Configuration.BaseUrl
             ContentType = 'text/xml; charset=utf-8'
             Body        = $xmlChallenge.InnerXml
         }
@@ -191,6 +101,366 @@ function Get-AuraAuthenticationCookie {
     } catch {
         $PSCmdlet.ThrowTerminatingError($_)
     }
+}
+
+function Resolve-AuraError {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [object]
+        $ErrorObject
+    )
+    process {
+        $httpErrorObj = [PSCustomObject]@{
+            ScriptLineNumber = $ErrorObject.InvocationInfo.ScriptLineNumber
+            Line             = $ErrorObject.InvocationInfo.Line
+            ErrorDetails     = $ErrorObject.Exception.Message
+            FriendlyMessage  = $ErrorObject.Exception.Message
+        }
+        if (-not [string]::IsNullOrEmpty($ErrorObject.ErrorDetails.Message)) {
+            $httpErrorObj.ErrorDetails = $ErrorObject.ErrorDetails.Message
+        } elseif ($ErrorObject.Exception.GetType().FullName -eq 'System.Net.WebException') {
+            if ($null -ne $ErrorObject.Exception.Response) {
+                $streamReaderResponse = [System.IO.StreamReader]::new($ErrorObject.Exception.Response.GetResponseStream()).ReadToEnd()
+                if (-not [string]::IsNullOrEmpty($streamReaderResponse)) {
+                    $httpErrorObj.ErrorDetails = $streamReaderResponse
+                }
+            }
+        }
+        try {
+            $errorDetailsObject = ($httpErrorObj.ErrorDetails | ConvertFrom-Json)
+            # Make sure to inspect the error result object and add only the error message as a FriendlyMessage.
+            # $httpErrorObj.FriendlyMessage = $errorDetailsObject.message
+            $httpErrorObj.FriendlyMessage = $httpErrorObj.ErrorDetails # Temporarily assignment
+        } catch {
+            $httpErrorObj.FriendlyMessage = $httpErrorObj.ErrorDetails
+        }
+        Write-Output $httpErrorObj
+    }
+}
+function ConvertTo-ImsAccountObject {
+    param(
+        [Parameter(
+            Mandatory,
+            ValueFromPipeline = $True,
+            Position = 0)]
+        $AuraAccount
+    )
+
+    $ImsAccountObject = [PSCustomObject] @{
+        address = @{}
+        demographics = @{}
+        userId = @{}
+        name = @()
+        telArray = @()
+        extension = @()
+    }
+
+    if (-not [string]::IsNullOrEmpty($AuraAccount.LENERSCODE))
+    {
+        $ImsAccountObject.userId.Add("userIdValue",$AuraAccount.LENERSCODE)
+    }
+    if (-not [string]::IsNullOrEmpty($AuraAccount.VOORN))
+    {
+        $part = @{
+            partName = @{
+                namePartType  = 'First'
+                namePartValue =$AuraAccount.VOORN
+            }
+        }
+        $ImsAccountObject.name += $part
+    }
+    if (-not [string]::IsNullOrEmpty($AuraAccount.VOORV))
+    {
+        $part = @{
+            partName = @{
+                namePartType  = 'Middle'
+                namePartValue =$AuraAccount.VOORV
+            }
+        }
+        $ImsAccountObject.name += $part
+    }
+
+    if (-not [string]::IsNullOrEmpty($AuraAccount.LENERSNAAM))
+    {
+        $part = @{
+            partName = @{
+                namePartType  = 'Last'
+                namePartValue =$AuraAccount.LENERSNAAM
+            }
+        }
+        $ImsAccountObject.name += $part
+    }
+
+    if (-not [string]::IsNullOrEmpty($AuraAccount.EMAILADRES))
+    {
+        $ImsAccountObject |  Add-Member -MemberType NoteProperty  -Name "email" -Value  $AuraAccount.EMAILADRES
+    }
+
+    if (-not [string]::IsNullOrEmpty($AuraAccount.PASNUMMER))
+    {
+        $extensionItem = @{
+            extensionField = @{
+                fieldName  = 'rentalcode'
+                fieldType  = 'String'
+                fieldValue =$AuraAccount.PASNUMMER
+            }
+        }
+        $ImsAccountObject.extension += $extensionItem
+    }
+
+    if (-not [string]::IsNullOrEmpty($AuraAccount.ADRES))
+    {
+        $ImsAccountObject.address.add("street",$AuraAccount.ADRES)
+    }
+
+    if (-not [string]::IsNullOrEmpty($AuraAccount.POSTCODE))
+    {
+        $ImsAccountObject.address.add("postcode",$AuraAccount.POSTCODE)
+    }
+
+    if (-not [string]::IsNullOrEmpty($AuraAccount.PLAATS ))
+    {
+        $ImsAccountObject.address.add("locality",$AuraAccount.PLAATS)
+    }
+
+    if (-not [string]::IsNullOrEmpty($AuraAccount.KAMERNR))
+    {
+        $ImsAccountObject.address.add("extadd",$AuraAccount.KAMERNR)
+    }
+
+    if (-not [string]::IsNullOrEmpty($AuraAccount.GEBDATUM))
+    {
+        $ImsAccountObject.demographics.add("bday",$AuraAccount.GEBDATUM)
+    }
+
+    if (-not [string]::IsNullOrEmpty($AuraAccount.GESLACHT))
+    {
+        $ImsAccountObject.demographics.add("gender",$AuraAccount.GESLACHT)
+    }
+
+    if (-not [string]::IsNullOrEmpty($AuraAccount.TELEFOON))
+    {
+        $telephoneItem = @{
+            tel = @{
+                telValue = $AuraAccount.TELEFOON
+                telType_ = "Voice"
+            }
+        }
+        $ImsAccountObject.telArray += $telephoneItem
+    }
+
+    if (-not [string]::IsNullOrEmpty($AuraAccount.GSM))
+    {
+        $telephoneItem = @{
+            tel = @{
+                telValue = $AuraAccount.GSM
+                telType_ = "Mobile"
+            }
+        }
+        $ImsAccountObject.telArray += $telephoneItem
+    }
+    #UITSDATUM is not used in the create/update actions
+
+    if (-not [string]::IsNullOrEmpty($AuraAccount.CC_EMAILADRES))
+    {
+        $extensionItem = @{
+            extensionField = @{
+                fieldName  = 'cc_emailadres'
+                fieldType  = 'String'
+                fieldValue =$AuraAccount.CC_EMAILADRES
+            }
+        }
+        $ImsAccountObject.extension += ($extensionItem)
+    }
+
+    if (-not [string]::IsNullOrEmpty($AuraAccount.VESTIGING))
+    {
+        $extensionItem = @{
+            extensionField = @{
+                fieldName  = 'vestiging'
+                fieldType  = 'String'
+                fieldValue =$AuraAccount.VESTIGING
+            }
+        }
+        $ImsAccountObject.extension += ($extensionItem)
+    }
+
+
+    if (-not [string]::IsNullOrEmpty($AuraAccount.UserPrincipName))
+    {
+        $extensionItem = @{
+            extensionField = @{
+                fieldName  = 'UserPrincipalName'
+                fieldType  = 'String'
+                fieldValue =$AuraAccount.UserPrincipName
+            }
+        }
+        $ImsAccountObject.extension += $extensionItem
+
+    }
+
+    if (-not [string]::IsNullOrEmpty($AuraAccount.password))
+    {
+        $ImsAccountObject.UserID.add("password",$AuraAccount.password)
+    }
+    write-output $ImsAccountObject
+}
+
+function ConvertTo-AuraAccountFromXML {
+    [OutputType([PSCustomObject])]
+    param(
+        [Parameter(
+            Mandatory,
+            ValueFromPipeline = $True,
+            Position = 0)]
+            [System.Xml.XmlElement]
+         $Person
+    )
+
+    $AuraAccountObject = [PSCustomObject] @{
+        LENERSCODE =        $Person.userId.userIdValue.'#Text'
+        VOORN =             $null
+        VOORV =             $null
+        LENERSNAAM =        $null
+        EMAILADRES =        $null
+        PASNUMMER =         $null
+        ADRES =             $null
+        PLAATS  =           $null
+        POSTCODE =          $null
+        GEBDATUM =          $null
+        GESLACHT =          $null
+        TELEFOON =          $null
+        GSM =               $null
+        KAMERNR =           $null
+        CC_EMAILADRES =     $null
+        VESTIGING =         $null
+        UserPricipName =    $null
+        password       =    $null
+    }
+
+
+    if ($null -ne $Person.email){
+        if (($Person.email.getType().Name) -eq "String"){
+            $AuraAccountObject.EMAILADRES =$Person.email
+        }
+        elseif (($Person.email.getType()).name -eq "XmlElement") {
+            $AuraAccountObject.EMAILADRES = $Person.email.'#text'
+        }
+    }
+
+    if ($null -ne $Person.address.street){
+        if (($Person.address.street.getType().Name) -eq "String")
+        {
+            $AuraAccountObject.ADRES =$Person.address.street
+        }
+    }
+    if ($null -ne $Person.address.locality){
+        if (($Person.address.locality.getType()).name -eq "String")
+        {
+            $AuraAccountObject.PLAATS = $Person.address.locality
+        }
+    }
+    if ($null -ne $Person.address.postcode){
+        if (($Person.address.postcode.getType().Name) -eq "String")
+        {
+            $AuraAccountObject.POSTCODE = $Person.address.postcode
+        }
+    }
+    if ($null -ne $Person.demographics.bday){
+        if (($Person.demographics.bday.getType()).Name -eq "String")
+        {
+            $AuraAccountObject.GEBDATUM = $Person.demographics.bday
+        }
+    }
+    if ($null -ne $Person.demographics.gender){
+        if (($Person.demographics.gender.getType()).Name -eq "String")
+        {
+            $AuraAccountObject.GESLACHT = $Person.demographics.gender
+        }
+    }
+    if ($null -ne $Person.address.extadd){
+        if ($Person.address.extadd.getType().Name -eq "String")
+        {
+            $AuraAccountObject.KAMERNR = $Person.address.extadd
+        }
+    }
+
+    if ($null -ne $Person.name){
+        if(($Person.Name.getType()).name -eq "XmlElement"){
+            if ($Person.Name.HasChildNodes){
+                foreach ($item in $Person.Name.ChildNodes){
+                    if($item.name -eq "partName"){
+                        switch($item.NamePartType){
+                            'First'{
+                                $AuraAccountObject.VOORN = $item.namePartValue
+                                break
+                            }
+                            'Middle'{
+                                $AuraAccountObject.VOORV = $item.namePartValue
+                                break
+                            }
+                            'Last'{
+                                $AuraAccountObject.LENERSNAAM = $item.namePartValue
+                                break
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if ($null -ne $Person.extension){
+        if(($Person.extension.getType()).name -eq "XmlElement"){
+            if ($Person.extension.HasChildNodes){
+                foreach ($item in $Person.Extension.ChildNodes){
+                    if($item.name -eq "extensionField"){
+                        switch ($Item.fieldName){
+
+                            'rentalcode' {
+                                $AuraAccountObject.PASNUMMER = $Item.fieldValue
+                                break
+                            }
+                            'cc_emailadres'{
+                                $AuraAccountObject.CC_EMAILADRES = $Item.fieldValue
+                                break
+                            }
+                            'vestiging'{
+                                $AuraAccountObject.VESTIGING = $Item.fieldValue
+                                break
+                            }
+                            'userprincipalname'{
+                                $AuraAccountObject.UserPrincipName = $Item.fieldValue
+                                break
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    foreach ($item in $Person.ChildNodes) {
+        if($item.name -eq "tel"){
+            switch ($Item.telType_) {
+                'Item1' {
+                    $AuraAccountObject.TELEFOON = $Item.telValue
+                    break
+                }
+                'Voice' {
+                    $AuraAccountObject.TELEFOON = $Item.telValue
+                    break
+                }
+                'Mobile' {
+                    $AuraAccountObject.GSM = $Item.telValue
+                    break
+                }
+            }
+
+        }
+    }
+
+    Write-Output $AuraAccountObject
+
 }
 
 function Write-ToAuraXmlDocument {
@@ -261,104 +531,76 @@ function Write-ToAuraXmlDocument {
         $_
     }
 }
-
-function Resolve-AuraError {
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory,
-            ValueFromPipeline
-        )]
-        [object]$ErrorObject
-    )
-    process {
-        $httpErrorObj = [PSCustomObject]@{
-            ScriptLineNumber = $ErrorObject.InvocationInfo.ScriptLineNumber
-            Line             = $ErrorObject.InvocationInfo.Line
-            ErrorDetails     = ''
-            FriendlyMessage  = ''
-        }
-        $ErrorObject.ErrorDetails.Message
-
-        if ($ErrorObject.Exception.GetType().FullName -eq 'System.Net.WebException') {
-            if ($ErrorObject.ErrorDetails) {
-                $httpErrorObj.ErrorDetails = $ErrorObject.ErrorDetails
-                $httpErrorObj.FriendlyMessage = ($ErrorObject.ErrorDetails.Message.Substring($ErrorObject.ErrorDetails.Message.IndexOf(';') + 2)) -replace ('---\u0026gt;', ';')
-            } elseif ($null -eq $ErrorObject.Exception.Response) {
-                $httpErrorObj.ErrorDetails = $ErrorObject.Exception.Message
-                if ($ErrorObject.ErrorDetails) {
-                    $httpErrorObj.ErrorDetails = $ErrorObject.ErrorDetails
-                }
-                $httpErrorObj.FriendlyMessage = $ErrorObject.Exception.Message
-            } else {
-                $httpErrorObj.ErrorDetails = $ErrorObject.Exception.Message
-                $httpErrorObj.FriendlyMessage = $ErrorObject.Exception.Message
-                $streamReaderResponse = [System.IO.StreamReader]::new($ErrorObject.Exception.Response.GetResponseStream()).ReadToEnd()
-                $httpErrorObj.ErrorDetails = "$($ErrorObject.Exception.Message) $streamReaderResponse"
-                if ($null -ne $streamReaderResponse) {
-                    $errorResponse = ( $streamReaderResponse | ConvertFrom-Json)
-                    $httpErrorObj.FriendlyMessage = $errorResponse
-                    $httpErrorObj.ErrorDetails = $errorResponse
-                }
-            }
-        } else {
-            $httpErrorObj.ErrorDetails = $ErrorObject.Exception.Message
-            $httpErrorObj.FriendlyMessage = $ErrorObject.Exception.Message
-        }
-        Write-Output $httpErrorObj
-    }
-}
 #endregion
 
-# Begin
 try {
-    # Verify if a user must be either [created and correlated], [updated and correlated] or just [correlated]
-    # Get Get-Aura Authentication Cookie
+    # Initial Assignments
+    $outputContext.AccountReference = 'Currently not available'
     $cookieResponse = Get-AuraAuthenticationCookie
-
-    # Add Cookie To WebRequest Session
     $WebSession = Add-CookieToWebRequestSession  $cookieResponse
 
-    # Get User
-    [xml]$xmlGetUser = '<?xml version="1.0" encoding="utf-8"?>
-    <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
-        <soap:Body>
-            <readPersonRequest xmlns="http://www.imsglobal.org/services/pms/xsd/imsPersonManMessSchema_v1p0">
-                <sourcedId>
-                    <identifier xmlns="http://www.imsglobal.org/services/common/imsCommonSchema_v1p0"></identifier>
-                </sourcedId>
-            </readPersonRequest>
-        </soap:Body>
-    </soap:Envelope>'
+    # Validate correlation configuration
+    if ($actionContext.CorrelationConfiguration.Enabled) {
+        $correlationField = $actionContext.CorrelationConfiguration.accountField
+        $correlationValue = $actionContext.CorrelationConfiguration.accountFieldValue
 
-    $xmlGetUser.Envelope.Body.readPersonRequest.sourcedId.identifier.InnerText = "$($account.userId.userIdValue)"
-    $splatWebRequest = @{
-        Method      = 'POST'
-        Uri         = $config.BaseUrl
-        ContentType = 'text/xml; charset=utf-8'
-        Body        = $xmlGetUser.InnerXml
-        WebSession  = $WebSession
+        if ([string]::IsNullOrEmpty($($correlationField))) {
+            throw 'Correlation is enabled but not configured correctly'
+        }
+        if ([string]::IsNullOrEmpty($($correlationValue))) {
+            throw 'Correlation is enabled but [accountFieldValue] is empty. Please make sure it is correctly mapped'
+        }
+
+        # Verify if a user must be either [created ] or just [correlated]
+        [xml]$xmlGetUser =  '<?xml version="1.0" encoding="utf-8"?>
+        <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+            <soap:Body>
+                <readPersonRequest xmlns="http://www.imsglobal.org/services/pms/xsd/imsPersonManMessSchema_v1p0">
+                    <sourcedId>
+                        <identifier xmlns="http://www.imsglobal.org/services/common/imsCommonSchema_v1p0"></identifier>
+                    </sourcedId>
+                </readPersonRequest>
+            </soap:Body>
+        </soap:Envelope>'
+
+        $xmlGetUser.Envelope.Body.readPersonRequest.sourcedId.identifier.InnerText = "$($actionContext.CorrelationConfiguration.accountFieldValue)"
+        $splatWebRequest = @{
+            Method      = 'POST'
+            Uri         = $actionContext.Configuration.BaseUrl
+            ContentType = 'text/xml; charset=utf-8'
+            Body        = $xmlGetUser.InnerXml
+            WebSession  = $WebSession
+        }
+
+        if (-not  [string]::IsNullOrEmpty($actionContext.Configuration.ProxyAddress)) {
+            $splatWebRequest['Proxy'] = $actionContext.Configuration.ProxyAddress
+        }
+
+        $userResponse =Invoke-RestMethod @splatWebRequest -UseBasicParsing -Verbose:$false
+        $userXmlObject = ([xml]$userResponse).Envelope.Body.readPersonResponse.person
+
+        $correlatedAccountID = $userXmlObject.userId.userIdValue.'#text'
     }
-    $userResponse = Invoke-RestMethod @splatWebRequest -UseBasicParsing -Verbose:$false
-    $userXmlObject = ([xml]$userResponse).Envelope.Body.readPersonResponse.person
 
-    if ([string]::IsNullOrEmpty($userXmlObject.userId.userIdValue.'#text')) {
-        $action = 'Create-Correlate'
-    } elseif ($updatePerson -eq $true) {
-        $action = 'Update-Correlate'
+    if ([string]::IsNullOrEmpty($correlatedAccountID)) {
+        $action = 'CreateAccount'
     } else {
-        $action = 'Correlate'
+        $action = 'CorrelateAccount'
     }
 
-    # Add a warning message showing what will happen during enforcement
-    if ($dryRun -eq $true) {
-        Write-Warning "[DryRun] $action Aura account for: [$($p.DisplayName)], will be executed during enforcement"
+    # Add a message and the result of each of the validations showing what will happen during enforcement
+    if ($actionContext.DryRun -eq $true) {
+        Write-Information "[DryRun] $action Aura account for: [$($personContext.Person.DisplayName)], will be executed during enforcement"
     }
 
     # Process
-    if (-not($dryRun -eq $true)) {
+    if (-not($actionContext.DryRun -eq $true)) {
         switch ($action) {
-            'Create-Correlate' {
-                Write-Verbose 'Creating and correlating Aura account'
+            'CreateAccount' {
+                Write-Information 'Creating and correlating Aura account'
+
+                # Make sure to test with special characters and if needed; add utf8 encoding.
+
                 [xml]$createXML = '<?xml version="1.0" encoding="utf-8"?>
                 <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
                     <soap:Body>
@@ -370,97 +612,77 @@ try {
                     </soap:Body>
                 </soap:Envelope>'
 
-                $createXML.Envelope.Body.createPersonRequest.sourcedId.identifier.InnerText = "$($account.userId.userIdValue)"
-
+                $createXML.Envelope.Body.createPersonRequest.sourcedId.identifier.InnerText = "$($actionContext.Data.LENERSCODE)"
                 $parentXmlElementPerson = $createXML.Envelope.Body.createPersonRequest.AppendChild( $createXML.CreateElement('person'))
-                $account | Select-Object *  -ExcludeProperty externalId | Write-ToAuraXmlDocument -XmlDocument $createXML -XmlParentElement $parentXmlElementPerson
+
+                $ImsAccount = $actionContext.Data | ConvertTo-ImsAccountObject
+
+                $ImsAccount |  Select-Object *  -ExcludeProperty telArray  | Write-ToAuraXmlDocument -XmlDocument $createXML -XmlParentElement $parentXmlElementPerson
+                foreach ($tel in $ImsAccount.telArray) {
+                    $tel | Write-ToAuraXmlDocument -XmlDocument $createXML -XmlParentElement $parentXmlElementPerson
+                }
+
                 $splatWebRequest = @{
                     Method      = 'POST'
-                    Uri         = $config.BaseUrl
+                    Uri         = $actionContext.Configuration.BaseUrl
                     ContentType = 'text/xml; charset=utf-8'
                     Body        = $createXML.InnerXml.Replace(' xmlns="">', '>') #Remove empty NameSpace
                     WebSession  = $WebSession
                 }
+
+                if (-not  [string]::IsNullOrEmpty($actionContext.Configuration.ProxyAddress)) {
+                    $splatWebRequest['Proxy'] = $actionContext.Configuration.ProxyAddress
+                }
+
                 $userResponse = Invoke-RestMethod @splatWebRequest -UseBasicParsing -Verbose:$false
+
 
                 if ($userResponse.Envelope.Header.syncResponseHeaderInfo.statusInfo.codeMajor -eq 'failure' -or
                 ($userResponse.Envelope.Header.syncResponseHeaderInfo.statusInfo.codeMajor -ne 'success' -and
-                    $userResponse.Envelope.Header.syncResponseHeaderInfo.statusInfo.description.text.'#text' -ne 'alles Ok'  )
+                $userResponse.Envelope.Header.syncResponseHeaderInfo.statusInfo.description.text.'#text' -ne 'alles Ok'  )
                 ) {
                     Write-Verbose $userResponse.Envelope.Header.syncResponseHeaderInfo.InnerXml
                     throw $userResponse.Envelope.Header.syncResponseHeaderInfo.statusInfo.description.text.'#text'
                 }
-                $accountReference = "$($account.userId.userIdValue)"
+
+                $outputContext.Data = $ActionContext.Data
+                $outputContext.AccountReference = $($ImsAccount.userId.userIdValue)
+                $auditLogMessage = "Create account was successful. AccountReference is: [$($outputContext.AccountReference)"
                 break
             }
 
-            'Update-Correlate' {
-                Write-Verbose 'Updating and correlating Aura account'
-                [xml]$updateXML = '<?xml version="1.0" encoding="utf-8"?>
-                <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
-                    <soap:Body>
-                        <updatePersonRequest xmlns="http://www.imsglobal.org/services/pms/xsd/imsPersonManMessSchema_v1p0">
-                            <sourcedId>
-                                <identifier xmlns="http://www.imsglobal.org/services/common/imsCommonSchema_v1p0"></identifier>
-                            </sourcedId>
-                        </updatePersonRequest>
-                    </soap:Body>
-                </soap:Envelope>'
+            'CorrelateAccount' {
+                Write-Information 'Correlating Aura account'
 
-                $updateXML.Envelope.Body.updatePersonRequest.sourcedId.identifier.InnerText = "$($account.userId.userIdValue)"
-
-                $parentXmlElementPerson = $updateXML.Envelope.Body.updatePersonRequest.AppendChild( $updateXML.CreateElement('person'))
-                $account.userId.Remove('password')
-                $account | Select-Object * -ExcludeProperty ExternalId  | Write-ToAuraXmlDocument -XmlDocument $updateXML -XmlParentElement $parentXmlElementPerson
-                $splatWebRequest = @{
-                    Method      = 'POST'
-                    Uri         = $config.BaseUrl
-                    ContentType = 'text/xml; charset=utf-8'
-                    Body        = $updateXML.InnerXml.Replace(' xmlns="">', '>') #Remove empty NameSpace
-                    WebSession  = $WebSession
-                }
-                $userResponse = Invoke-RestMethod @splatWebRequest -UseBasicParsing -Verbose:$false
-
-                if ($userResponse.Envelope.Header.syncResponseHeaderInfo.statusInfo.codeMajor -eq 'failure' -or
-                    ($userResponse.Envelope.Header.syncResponseHeaderInfo.statusInfo.codeMajor -ne 'success' -and
-                    $userResponse.Envelope.Header.syncResponseHeaderInfo.statusInfo.description.text.'#text' -ne 'alles Ok'  )
-                ) {
-                    Write-Verbose $userResponse.Envelope.Header.syncResponseHeaderInfo.InnerXml
-                    throw $userResponse.Envelope.Header.syncResponseHeaderInfo.statusInfo.description.text.'#text'
-                }
-                $accountReference = "$($account.userId.userIdValue)"
-                break
-            }
-
-            'Correlate' {
-                Write-Verbose 'Correlating Aura account'
-                $accountReference = "$($account.userId.userIdValue)"
+                $outputContext.Data = $userXmlObject | ConvertTo-AuraAccountFromXML
+                $outputContext.AccountReference = $correlatedAccountID
+                $outputContext.AccountCorrelated = $true
+                $auditLogMessage = "Correlated account: [$($correlatedAccount.ExternalId)] on field: [$($correlationField)] with value: [$($correlationValue)]"
                 break
             }
         }
 
-        $success = $true
-        $auditLogs.Add([PSCustomObject]@{
-                Message = "$action account was successful. AccountReference is: [$accountReference]"
+        $outputContext.success = $true
+        $outputContext.AuditLogs.Add([PSCustomObject]@{
+                Action  = $action
+                Message = $auditLogMessage
                 IsError = $false
             })
     }
 } catch {
+    $outputContext.success = $false
     $ex = $PSItem
-    $errorObj = Resolve-AuraError -ErrorObject $ex
-    Write-Verbose "Could not $action Aura account. Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
-    $auditLogs.Add([PSCustomObject]@{
-            Message = "Could not $action Aura account. Error: $($errorObj.FriendlyMessage)"
+    if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
+        $($ex.Exception.GetType().FullName -eq 'System.Net.WebException')) {
+        $errorObj = Resolve-AuraError -ErrorObject $ex
+        $auditMessage = "Could not create or correlate Aura account. Error: $($errorObj.FriendlyMessage)"
+        Write-Warning "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
+    } else {
+        $auditMessage = "Could not create or correlate Aura account. Error: $($ex.Exception.Message)"
+        Write-Warning "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
+    }
+    $outputContext.AuditLogs.Add([PSCustomObject]@{
+            Message = $auditMessage
             IsError = $true
         })
-    # End
-} finally {
-    $result = [PSCustomObject]@{
-        Success          = $success
-        AccountReference = $accountReference
-        Auditlogs        = $auditLogs
-        Account          = $account
-    }
-    Write-Output $result | ConvertTo-Json -Depth 10
 }
-
