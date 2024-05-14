@@ -1,36 +1,13 @@
-#####################################################
+##################################################V2
 # HelloID-Conn-Prov-Target-Aura-Disable
-#
-# Version: 1.0.0
-#####################################################
-# Initialize default values
-$config = $configuration | ConvertFrom-Json
-$p = $person | ConvertFrom-Json
-$success = $false
-$auditLogs = [System.Collections.Generic.List[PSCustomObject]]::new()
-
-
-
-# Account mapping
-$account = [PSCustomObject]@{
-    address = @{
-        extadd = "$(Get-Date -Format 'yyyyMMdd')"
-    }
-    userId  = @{
-        userIdValue = $p.ExternalId
-    }
-}
+# PowerShell V2
+##################################################
 
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
 
-# Set debug logging
-switch ($($config.IsDebug)) {
-    $true { $VerbosePreference = 'Continue' }
-    $false { $VerbosePreference = 'SilentlyContinue' }
-}
-
 #region functions
+
 function ConvertTo-ChallengeResponseCode {
     [OutputType([System.String])]
     [CmdletBinding()]
@@ -43,7 +20,7 @@ function ConvertTo-ChallengeResponseCode {
         $shaObj.Initialize();
 
         $encoder = [System.Text.ASCIIEncoding]::new()
-        $hash = $shaObj.ComputeHash($encoder.GetBytes($challengeResult + "tools4ever" + $config.password))
+        $hash = $shaObj.ComputeHash($encoder.GetBytes($challengeResult + "tools4ever" + $actionContext.Configuration.password))
 
         $shaobj.Clear()
         $challengeResponseCode = [System.String]::Concat(($hash | ForEach-Object {
@@ -69,7 +46,7 @@ function Add-CookieToWebRequestSession {
         if ([string]::IsNullOrWhiteSpace($CookieNameValue)) {
             throw 'Cookie Not Found, Please check you password'
         }
-        $uri = [system.uri]::new($config.BaseUrl)
+        $uri = [system.uri]::new($actionContext.Configuration.BaseUrl)
 
         $Cookie = [System.Net.Cookie]::new()
         $Cookie.Name = ($CookieNameValue -split '=') | Select-Object -First 1
@@ -100,7 +77,7 @@ function Get-AuraAuthenticationCookie {
 
         $splatWebRequest = @{
             Method      = 'POST'
-            Uri         = $config.BaseUrl
+            Uri         = $actionContext.Configuration.BaseUrl
             ContentType = 'text/xml; charset=utf-8'
             Body        = $xmlChallenge.InnerXml
         }
@@ -194,70 +171,20 @@ function Write-ToAuraXmlDocument {
         $_
     }
 }
-
-function Resolve-AuraError {
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory,
-            ValueFromPipeline
-        )]
-        [object]$ErrorObject
-    )
-    process {
-        $httpErrorObj = [PSCustomObject]@{
-            ScriptLineNumber = $ErrorObject.InvocationInfo.ScriptLineNumber
-            Line             = $ErrorObject.InvocationInfo.Line
-            ErrorDetails     = ''
-            FriendlyMessage  = ''
-        }
-        $ErrorObject.ErrorDetails.Message
-
-        if ($ErrorObject.Exception.GetType().FullName -eq 'System.Net.WebException') {
-            if ($ErrorObject.ErrorDetails) {
-                $httpErrorObj.ErrorDetails = $ErrorObject.ErrorDetails
-                $httpErrorObj.FriendlyMessage = ($ErrorObject.ErrorDetails.Message.Substring($ErrorObject.ErrorDetails.Message.IndexOf(';') + 2)) -replace ('---\u0026gt;', ';')
-            } elseif ($null -eq $ErrorObject.Exception.Response) {
-                $httpErrorObj.ErrorDetails = $ErrorObject.Exception.Message
-                if ($ErrorObject.ErrorDetails) {
-                    $httpErrorObj.ErrorDetails = $ErrorObject.ErrorDetails
-                }
-                $httpErrorObj.FriendlyMessage = $ErrorObject.Exception.Message
-            } else {
-                $httpErrorObj.ErrorDetails = $ErrorObject.Exception.Message
-                $httpErrorObj.FriendlyMessage = $ErrorObject.Exception.Message
-                # $ErrorObject | select *
-                $streamReaderResponse = [System.IO.StreamReader]::new($ErrorObject.Exception.Response.GetResponseStream()).ReadToEnd()
-                $httpErrorObj.ErrorDetails = "$($ErrorObject.Exception.Message) $streamReaderResponse"
-                if ($null -ne $streamReaderResponse) {
-                    $errorResponse = ( $streamReaderResponse | ConvertFrom-Json)
-                    $httpErrorObj.FriendlyMessage = $errorResponse
-                    $httpErrorObj.ErrorDetails = $errorResponse
-                    # $httpErrorObj.FriendlyMessage = switch ($errorResponse) {
-                    #     { $_.error_description } { $errorResponse.error_description }
-                    #     { $_.issue.details } { $errorResponse.issue.details }
-                    #     { $_.error.message } { "Probably OrganisationId or Environment not found: Error: $($errorResponse.error.message)" }
-                    #     default { ($errorResponse | ConvertTo-Json) }
-                    # }
-                }
-            }
-        } else {
-            $httpErrorObj.ErrorDetails = $ErrorObject.Exception.Message
-            $httpErrorObj.FriendlyMessage = $ErrorObject.Exception.Message
-        }
-        Write-Output $httpErrorObj
-    }
-}
 #endregion
 
-# Begin
 try {
-    # Get Get-Aura Authentication Cookie
-    $cookieResponse = Get-AuraAuthenticationCookie
+    # Verify if [aRef] has a value
+    if ([string]::IsNullOrEmpty($($actionContext.References.Account))) {
+        throw 'The account reference could not be found'
+    }
 
-    # Add Cookie To WebRequest Session
+    $cookieResponse = Get-AuraAuthenticationCookie
     $WebSession = Add-CookieToWebRequestSession  $cookieResponse
 
-    [xml]$xmlGetUser = '<?xml version="1.0" encoding="utf-8"?>
+    Write-Information "Verifying if a Aura account for [$($personContext.Person.DisplayName)] exists"
+
+    [xml]$xmlGetUser =  '<?xml version="1.0" encoding="utf-8"?>
     <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
         <soap:Body>
             <readPersonRequest xmlns="http://www.imsglobal.org/services/pms/xsd/imsPersonManMessSchema_v1p0">
@@ -268,37 +195,50 @@ try {
         </soap:Body>
     </soap:Envelope>'
 
-    $xmlGetUser.Envelope.Body.readPersonRequest.sourcedId.identifier.InnerText = "$($account.userId.userIdValue)"
+    $xmlGetUser.Envelope.Body.readPersonRequest.sourcedId.identifier.InnerText = "$($actionContext.References.Account)"
     $splatWebRequest = @{
         Method      = 'POST'
-        Uri         = $config.BaseUrl
+        Uri         = $actionContext.Configuration.BaseUrl
         ContentType = 'text/xml; charset=utf-8'
         Body        = $xmlGetUser.InnerXml
         WebSession  = $WebSession
     }
-    $userResponse = Invoke-RestMethod @splatWebRequest -UseBasicParsing -Verbose:$false
-    $userXmlObject = ([xml]$userResponse).Envelope.Body.readPersonResponse.person
 
-    Write-Verbose "Verifying if a Aura account for [$($p.DisplayName)] exists"
-    if (-not [string]::IsNullOrEmpty($userXmlObject.userId.userIdValue.'#text')) {
-        $action = 'Found'
-        $dryRunMessage = "Disable Aura account for: [$($p.DisplayName)] will be executed during enforcement"
-
-    } elseif ($null -eq $userResponse) {
-        $action = 'NotFound'
-        $dryRunMessage = "Aura account for: [$($p.DisplayName)] not found. Possibily already deleted. Skipping action"
+    if (-not  [string]::IsNullOrEmpty($actionContext.Configuration.ProxyAddress)) {
+        $splatWebRequest['Proxy'] = $actionContext.Configuration.ProxyAddress
     }
 
-    # Add an auditMessage showing what will happen during enforcement
-    if ($dryRun -eq $true) {
-        Write-Warning "[DryRun] $dryRunMessage"
+    $userResponse =Invoke-RestMethod @splatWebRequest -UseBasicParsing -Verbose:$false
+    $userXmlObject = ([xml]$userResponse).Envelope.Body.readPersonResponse.person
+    $correlatedAccountID = $userXmlObject.userId.userIdValue.'#text'
+
+    if ($null -ne $correlatedAccountID) {
+        $action = 'DisableAccount'
+        $dryRunMessage = "Disable Aura account: [$($actionContext.References.Account)] for person: [$($personContext.Person.DisplayName)] will be executed during enforcement"
+    } else {
+        $action = 'NotFound'
+        $dryRunMessage = "Aura account: [$($actionContext.References.Account)] for person: [$($personContext.Person.DisplayName)] could not be found, possibly indicating that it could be deleted, or the account is not correlated"
+    }
+
+    # Add a message and the result of each of the validations showing what will happen during enforcement
+    if ($actionContext.DryRun -eq $true) {
+        Write-Information "[DryRun] $dryRunMessage"
     }
 
     # Process
-    if (-not($dryRun -eq $true)) {
+    if (-not($actionContext.DryRun -eq $true)) {
         switch ($action) {
-            'Found' {
-                Write-Verbose "Disable Aura account with accountReference: [$aRef]"
+            'DisableAccount' {
+                Write-Information "Disabling Aura account with accountReference: [$($actionContext.References.Account)]"
+
+                $ImsDisableAccount = [PSCustomObject]@{
+                    address = @{
+                        extadd = "$($ActionContext.Data.UITSDATUM)"
+                    }
+                    userId  = @{
+                        userIdValue = $correlatedAccountID
+                    }
+                }
 
                 [xml]$updateXML = '<?xml version="1.0" encoding="utf-8"?>
                 <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
@@ -311,13 +251,14 @@ try {
                     </soap:Body>
                 </soap:Envelope>'
 
-                $updateXML.Envelope.Body.updatePersonRequest.sourcedId.identifier.InnerText = "$($account.userId.userIdValue)"
-
+                $updateXML.Envelope.Body.updatePersonRequest.sourcedId.identifier.InnerText = "$($actionContext.References.Account)"
                 $parentXmlElementPerson = $updateXML.Envelope.Body.updatePersonRequest.AppendChild( $updateXML.CreateElement('person'))
-                $account | Select-Object * -ExcludeProperty ExternalId  | Write-ToAuraXmlDocument -XmlDocument $updateXML -XmlParentElement $parentXmlElementPerson
+
+                $ImsDisableAccount |  Select-Object *  | Write-ToAuraXmlDocument -XmlDocument $updateXML -XmlParentElement $parentXmlElementPerson
+
                 $splatWebRequest = @{
                     Method      = 'POST'
-                    Uri         = $config.BaseUrl
+                    Uri         = $actionContext.Configuration.BaseUrl
                     ContentType = 'text/xml; charset=utf-8'
                     Body        = $updateXML.InnerXml.Replace(' xmlns="">', '>') #Remove empty NameSpace
                     WebSession  = $WebSession
@@ -332,45 +273,39 @@ try {
                     throw $userResponse.Envelope.Header.syncResponseHeaderInfo.statusInfo.description.text.'#text'
                 }
 
-                $auditLogs.Add([PSCustomObject]@{
-                        Message = 'Disable account was successful'
-                        IsError = $false
-                    })
+                $outputContext.data = $actionContext.Data
+                $outputContext.Success = $true
+                $outputContext.AuditLogs.Add([PSCustomObject]@{
+                    Message = 'Disable account was successful'
+                    IsError = $false
+                })
                 break
             }
 
             'NotFound' {
-                $auditLogs.Add([PSCustomObject]@{
-                        Message = "Aura account for: [$($p.DisplayName)] not found. Possibily already deleted. Skipping action"
-                        IsError = $false
-                    })
+                $outputContext.Success  = $true
+                $outputContext.AuditLogs.Add([PSCustomObject]@{
+                    Message = "Aura account: [$($actionContext.References.Account)] for person: [$($personContext.Person.DisplayName)] could not be found, possibly indicating that it could be deleted, or the account is not correlated"
+                    IsError = $false
+                })
                 break
             }
         }
-
-        $success = $true
     }
 } catch {
-    $success = $false
+    $outputContext.success = $false
     $ex = $PSItem
     if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
         $($ex.Exception.GetType().FullName -eq 'System.Net.WebException')) {
         $errorObj = Resolve-AuraError -ErrorObject $ex
         $auditMessage = "Could not disable Aura account. Error: $($errorObj.FriendlyMessage)"
-        Write-Verbose "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
+        Write-Warning "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
     } else {
-        $auditMessage = "Could not disable Aura account. Error: $($ex.Exception.Message)"
-        Write-Verbose "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
+        $auditMessage = "Could not disable Aura account. Error: $($_.Exception.Message)"
+        Write-Warning "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
     }
-    $auditLogs.Add([PSCustomObject]@{
-            Message = $auditMessage
-            IsError = $true
-        })
-    # End
-} finally {
-    $result = [PSCustomObject]@{
-        Success   = $success
-        Auditlogs = $auditLogs
-    }
-    Write-Output $result | ConvertTo-Json -Depth 10
+    $outputContext.AuditLogs.Add([PSCustomObject]@{
+        Message = $auditMessage
+        IsError = $true
+    })
 }

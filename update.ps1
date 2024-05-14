@@ -1,101 +1,13 @@
-#####################################################
+#################################################
 # HelloID-Conn-Prov-Target-Aura-Update
-#
-# Version: 1.0.0
-#####################################################
-# Initialize default values
-$config = $configuration | ConvertFrom-Json
-$p = $person | ConvertFrom-Json
-$pp = $previousPerson | ConvertFrom-Json
-$aRef = $AccountReference | ConvertFrom-Json
-$success = $false
-$auditLogs = [System.Collections.Generic.List[PSCustomObject]]::new()
-
-# Account mapping
-$account = [PSCustomObject]@{
-    address         = @{
-        country  = 'nl'
-        extadd   = ''
-        locality = ''
-        pobox    = ''
-        postcode = '1234ac'
-        region   = ''
-        street   = 'Tools'
-    }
-    dataSource      = 'Aura Software'
-    demographics    = @{
-        gender = 'Male'
-        bday   = '2000-01-02'
-    }
-    email           = $p.Contact.Business.Email
-    formatName      = ''
-    name            = @(
-        @{
-            nameType = 'Full'
-        },
-        @{
-            partName = @{
-                namePartType  = 'First'
-                namePartValue = $p.Name.NickName
-            }
-        },
-        @{
-            partName = @{
-                namePartType  = 'Middle'
-                namePartValue = $null
-            }
-        },
-        @{
-            partName = @{
-                namePartType  = 'Last'
-                namePartValue = $p.Name.FamilyName
-            }
-        }
-    )
-    systemRole      = 'User' # SysAdmin, SysSupport, Creator,AccountAdmin,User,Administrator,None,
-    userId          = @{
-        authenticationType = ''
-        pwEncryptionType   = ''
-        userIdType         = ''
-        userIdValue        = $p.ExternalId
-    }
-    institutionRole = @(
-        @{
-            InstitutionRoleDType = @{
-                # Student,  Faculty,  Member,  Learner,  Instructor,  Mentor,  Staff,  Alumni,  ProspectiveStudent,  Guest,  Other,  iAdministrator,  Observer,
-                institutionRoleType_ = ''
-                primaryRoleType      = ''
-            }
-        }
-    )
-    extension       = @(
-        @{
-            extensionField = @{ #extensionField
-                fieldName  = 'rentalcode'
-                fieldType  = 'String'
-                fieldValue = 700
-            }
-        },
-        @{
-            extensionField = @{
-                fieldName  = 'vestiging'
-                fieldType  = 'String'
-                fieldValue = ''
-            }
-        }
-    )
-}
+# PowerShell V2
+#################################################
 
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
 
-# Set debug logging
-switch ($($config.IsDebug)) {
-    $true { $VerbosePreference = 'Continue' }
-    $false { $VerbosePreference = 'SilentlyContinue' }
-}
-
 #region functions
+
 function ConvertTo-ChallengeResponseCode {
     [OutputType([System.String])]
     [CmdletBinding()]
@@ -108,7 +20,7 @@ function ConvertTo-ChallengeResponseCode {
         $shaObj.Initialize();
 
         $encoder = [System.Text.ASCIIEncoding]::new()
-        $hash = $shaObj.ComputeHash($encoder.GetBytes($challengeResult + "tools4ever" + $config.password))
+        $hash = $shaObj.ComputeHash($encoder.GetBytes($challengeResult + "tools4ever" + $actionContext.Configuration.password))
 
         $shaobj.Clear()
         $challengeResponseCode = [System.String]::Concat(($hash | ForEach-Object {
@@ -120,7 +32,6 @@ function ConvertTo-ChallengeResponseCode {
         $PSCmdlet.ThrowTerminatingError($_)
     }
 }
-
 
 function Add-CookieToWebRequestSession {
     [CmdletBinding()]
@@ -135,7 +46,7 @@ function Add-CookieToWebRequestSession {
         if ([string]::IsNullOrWhiteSpace($CookieNameValue)) {
             throw 'Cookie Not Found, Please check you password'
         }
-        $uri = [system.uri]::new($config.BaseUrl)
+        $uri = [system.uri]::new($actionContext.Configuration.BaseUrl)
 
         $Cookie = [System.Net.Cookie]::new()
         $Cookie.Name = ($CookieNameValue -split '=') | Select-Object -First 1
@@ -166,7 +77,7 @@ function Get-AuraAuthenticationCookie {
 
         $splatWebRequest = @{
             Method      = 'POST'
-            Uri         = $config.BaseUrl
+            Uri         = $actionContext.Configuration.BaseUrl
             ContentType = 'text/xml; charset=utf-8'
             Body        = $xmlChallenge.InnerXml
         }
@@ -190,6 +101,335 @@ function Get-AuraAuthenticationCookie {
     } catch {
         $PSCmdlet.ThrowTerminatingError($_)
     }
+}
+function ConvertTo-AuraAccountFromXML {
+    [OutputType([PSCustomObject])]
+    param(
+        [Parameter(
+            Mandatory,
+            ValueFromPipeline = $True,
+            Position = 0)]
+            [System.Xml.XmlElement]
+         $Person
+    )
+
+    $AuraAccountObject = [PSCustomObject] @{
+        LENERSCODE =        $Person.userId.userIdValue.'#Text'
+        VOORN =             $null
+        VOORV =             $null
+        LENERSNAAM =        $null
+        EMAILADRES =        $null
+        PASNUMMER =         $null
+        ADRES =             $null
+        PLAATS  =           $null
+        POSTCODE =          $null
+        GEBDATUM =          $null
+        GESLACHT =          $null
+        TELEFOON =          $null
+        GSM =               $null
+        KAMERNR =           $null
+        CC_EMAILADRES =     $null
+        VESTIGING =         $null
+        UserPricipName =    $null
+        password       =    $null
+    }
+
+
+    if ($null -ne $Person.email){
+        if (($Person.email.getType().Name) -eq "String"){
+            $AuraAccountObject.EMAILADRES =$Person.email
+        }
+        elseif (($Person.email.getType()).name -eq "XmlElement") {
+            $AuraAccountObject.EMAILADRES = $Person.email.'#text'
+        }
+    }
+
+    if ($null -ne $Person.address.street){
+        if (($Person.address.street.getType().Name) -eq "String")
+        {
+            $AuraAccountObject.ADRES =$Person.address.street
+        }
+    }
+    if ($null -ne $Person.address.locality){
+        if (($Person.address.locality.getType()).name -eq "String")
+        {
+            $AuraAccountObject.PLAATS = $Person.address.locality
+        }
+    }
+    if ($null -ne $Person.address.postcode){
+        if (($Person.address.postcode.getType().Name) -eq "String")
+        {
+            $AuraAccountObject.POSTCODE = $Person.address.postcode
+        }
+    }
+    if ($null -ne $Person.demographics.bday){
+        if (($Person.demographics.bday.getType()).Name -eq "String")
+        {
+            $AuraAccountObject.GEBDATUM = $Person.demographics.bday
+        }
+    }
+    if ($null -ne $Person.demographics.gender){
+        if (($Person.demographics.gender.getType()).Name -eq "String")
+        {
+            $AuraAccountObject.GESLACHT = $Person.demographics.gender
+        }
+    }
+    if ($null -ne $Person.address.extadd){
+        if ($Person.address.extadd.getType().Name -eq "String")
+        {
+            $AuraAccountObject.KAMERNR = $Person.address.extadd
+        }
+    }
+
+    if ($null -ne $Person.name){
+        if(($Person.Name.getType()).name -eq "XmlElement"){
+            if ($Person.Name.HasChildNodes){
+                foreach ($item in $Person.Name.ChildNodes){
+                    if($item.name -eq "partName"){
+                        switch($item.NamePartType){
+                            'First'{
+                                $AuraAccountObject.VOORN = $item.namePartValue
+                                break
+                            }
+                            'Middle'{
+                                $AuraAccountObject.VOORV = $item.namePartValue
+                                break
+                            }
+                            'Last'{
+                                $AuraAccountObject.LENERSNAAM = $item.namePartValue
+                                break
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if ($null -ne $Person.extension){
+        if(($Person.extension.getType()).name -eq "XmlElement"){
+            if ($Person.extension.HasChildNodes){
+                foreach ($item in $Person.Extension.ChildNodes){
+                    if($item.name -eq "extensionField"){
+                        switch ($Item.fieldName){
+
+                            'rentalcode' {
+                                $AuraAccountObject.PASNUMMER = $Item.fieldValue
+                                break
+                            }
+                            'cc_emailadres'{
+                                $AuraAccountObject.CC_EMAILADRES = $Item.fieldValue
+                                break
+                            }
+                            'vestiging'{
+                                $AuraAccountObject.VESTIGING = $Item.fieldValue
+                                break
+                            }
+                            'userprincipalname'{
+                                $AuraAccountObject.UserPrincipName = $Item.fieldValue
+                                break
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    foreach ($item in $Person.ChildNodes) {
+        if($item.name -eq "tel"){
+            switch ($Item.telType_) {
+                'Item1' {
+                    $AuraAccountObject.TELEFOON = $Item.telValue
+                    break
+                }
+                'Voice' {
+                    $AuraAccountObject.TELEFOON = $Item.telValue
+                    break
+                }
+                'Mobile' {
+                    $AuraAccountObject.GSM = $Item.telValue
+                    break
+                }
+            }
+
+        }
+    }
+
+    Write-Output $AuraAccountObject
+
+}
+
+function ConvertTo-ImsAccountUpdateObject {
+    param(
+        [Parameter(
+            Mandatory,
+            ValueFromPipeline = $True,
+            Position = 0)]
+        $AuraAccount,
+
+        [Parameter(
+            Mandatory)
+            ]
+        $AccountRef
+    )
+
+    $ImsAccountObject = [PSCustomObject] @{
+        address = @{}
+        demographics = @{}
+        userId = @{}
+        name = @()
+        telArray = @()
+        extension = @()
+    }
+
+    $ImsAccountObject.userId.Add("userIdValue", $AccountRef)
+
+    if (-not [string]::IsNullOrEmpty($AuraAccount.VOORN))
+    {
+        $part = @{
+            partName = @{
+                namePartType  = 'First'
+                namePartValue =$AuraAccount.VOORN
+            }
+        }
+        $ImsAccountObject.name += $part
+    }
+    if (-not [string]::IsNullOrEmpty($AuraAccount.VOORV))
+    {
+        $part = @{
+            partName = @{
+                namePartType  = 'Middle'
+                namePartValue =$AuraAccount.VOORV
+            }
+        }
+        $ImsAccountObject.name += $part
+    }
+
+    if (-not [string]::IsNullOrEmpty($AuraAccount.LENERSNAAM))
+    {
+        $part = @{
+            partName = @{
+                namePartType  = 'Last'
+                namePartValue =$AuraAccount.LENERSNAAM
+            }
+        }
+        $ImsAccountObject.name += $part
+    }
+
+    if (-not [string]::IsNullOrEmpty($AuraAccount.EMAILADRES))
+    {
+        $ImsAccountObject |  Add-Member -MemberType NoteProperty  -Name "email" -Value  $AuraAccount.EMAILADRES
+    }
+
+    if (-not [string]::IsNullOrEmpty($AuraAccount.PASNUMMER))
+    {
+        $extensionItem = @{
+            extensionField = @{
+                fieldName  = 'rentalcode'
+                fieldType  = 'String'
+                fieldValue =$AuraAccount.PASNUMMER
+            }
+        }
+        $ImsAccountObject.extension += $extensionItem
+    }
+
+    if (-not [string]::IsNullOrEmpty($AuraAccount.ADRES))
+    {
+        $ImsAccountObject.address.add("street",$AuraAccount.ADRES)
+    }
+
+    if (-not [string]::IsNullOrEmpty($AuraAccount.POSTCODE))
+    {
+        $ImsAccountObject.address.add("postcode",$AuraAccount.POSTCODE)
+    }
+
+    if (-not [string]::IsNullOrEmpty($AuraAccount.PLAATS ))
+    {
+        $ImsAccountObject.address.add("locality",$AuraAccount.PLAATS)
+    }
+
+    if (-not [string]::IsNullOrEmpty($AuraAccount.KAMERNR))
+    {
+        $ImsAccountObject.address.add("extadd",$AuraAccount.KAMERNR)
+    }
+
+    if (-not [string]::IsNullOrEmpty($AuraAccount.GEBDATUM))
+    {
+        $ImsAccountObject.demographics.add("bday",$AuraAccount.GEBDATUM)
+    }
+
+    if (-not [string]::IsNullOrEmpty($AuraAccount.GESLACHT))
+    {
+        $ImsAccountObject.demographics.add("gender",$AuraAccount.GESLACHT)
+    }
+
+    if (-not [string]::IsNullOrEmpty($AuraAccount.TELEFOON))
+    {
+        $telephoneItem = @{
+            tel = @{
+                telValue = $AuraAccount.TELEFOON
+                telType_ = "Voice"
+            }
+        }
+        $ImsAccountObject.telArray += $telephoneItem
+    }
+
+    if (-not [string]::IsNullOrEmpty($AuraAccount.GSM))
+    {
+        $telephoneItem = @{
+            tel = @{
+                telValue = $AuraAccount.GSM
+                telType_ = "Mobile"
+            }
+        }
+        $ImsAccountObject.telArray += $telephoneItem
+    }
+    #UITSDATUM is not used in the create/update actions
+
+    if (-not [string]::IsNullOrEmpty($AuraAccount.CC_EMAILADRES))
+    {
+        $extensionItem = @{
+            extensionField = @{
+                fieldName  = 'cc_emailadres'
+                fieldType  = 'String'
+                fieldValue =$AuraAccount.CC_EMAILADRES
+            }
+        }
+        $ImsAccountObject.extension += ($extensionItem)
+    }
+
+
+    if (-not [string]::IsNullOrEmpty($AuraAccount.VESTIGING))
+    {
+        $extensionItem = @{
+            extensionField = @{
+                fieldName  = 'vestiging'
+                fieldType  = 'String'
+                fieldValue =$AuraAccount.VESTIGING
+            }
+        }
+        $ImsAccountObject.extension += ($extensionItem)
+    }
+
+
+    if (-not [string]::IsNullOrEmpty($AuraAccount.UserPrincipName))
+    {
+        $extensionItem = @{
+            extensionField = @{
+                fieldName  = 'UserPrincipalName'
+                fieldType  = 'String'
+                fieldValue =$AuraAccount.UserPrincipName
+            }
+        }
+        $ImsAccountObject.extension += $extensionItem
+
+    }
+
+    if (-not [string]::IsNullOrEmpty($AuraAccount.password))
+    {
+        $ImsAccountObject.UserID.add("password",$AuraAccount.password)
+
+    }
+    write-output $ImsAccountObject
 }
 
 function Write-ToAuraXmlDocument {
@@ -257,108 +497,126 @@ function Write-ToAuraXmlDocument {
             }
         }
     } catch {
-        $PSCmdlet.ThrowTerminatingError($_)
+        $_
     }
 }
 
 function Resolve-AuraError {
     [CmdletBinding()]
     param (
-        [Parameter(Mandatory,
-            ValueFromPipeline
-        )]
-        [object]$ErrorObject
+        [Parameter(Mandatory)]
+        [object]
+        $ErrorObject
     )
     process {
         $httpErrorObj = [PSCustomObject]@{
             ScriptLineNumber = $ErrorObject.InvocationInfo.ScriptLineNumber
             Line             = $ErrorObject.InvocationInfo.Line
-            ErrorDetails     = ''
-            FriendlyMessage  = ''
+            ErrorDetails     = $ErrorObject.Exception.Message
+            FriendlyMessage  = $ErrorObject.Exception.Message
         }
-        $ErrorObject.ErrorDetails.Message
-
-        if ($ErrorObject.Exception.GetType().FullName -eq 'System.Net.WebException') {
-            if ($ErrorObject.ErrorDetails) {
-                $httpErrorObj.ErrorDetails = $ErrorObject.ErrorDetails
-                $httpErrorObj.FriendlyMessage = ($ErrorObject.ErrorDetails.Message.Substring($ErrorObject.ErrorDetails.Message.IndexOf(';') + 2)) -replace ('---\u0026gt;', ';')
-            } elseif ($null -eq $ErrorObject.Exception.Response) {
-                $httpErrorObj.ErrorDetails = $ErrorObject.Exception.Message
-                if ($ErrorObject.ErrorDetails) {
-                    $httpErrorObj.ErrorDetails = $ErrorObject.ErrorDetails
-                }
-                $httpErrorObj.FriendlyMessage = $ErrorObject.Exception.Message
-            } else {
-                $httpErrorObj.ErrorDetails = $ErrorObject.Exception.Message
-                $httpErrorObj.FriendlyMessage = $ErrorObject.Exception.Message
+        if (-not [string]::IsNullOrEmpty($ErrorObject.ErrorDetails.Message)) {
+            $httpErrorObj.ErrorDetails = $ErrorObject.ErrorDetails.Message
+        } elseif ($ErrorObject.Exception.GetType().FullName -eq 'System.Net.WebException') {
+            if ($null -ne $ErrorObject.Exception.Response) {
                 $streamReaderResponse = [System.IO.StreamReader]::new($ErrorObject.Exception.Response.GetResponseStream()).ReadToEnd()
-                $httpErrorObj.ErrorDetails = "$($ErrorObject.Exception.Message) $streamReaderResponse"
-                if ($null -ne $streamReaderResponse) {
-                    $errorResponse = ( $streamReaderResponse | ConvertFrom-Json)
-                    $httpErrorObj.FriendlyMessage = $errorResponse
-                    $httpErrorObj.ErrorDetails = $errorResponse
+                if (-not [string]::IsNullOrEmpty($streamReaderResponse)) {
+                    $httpErrorObj.ErrorDetails = $streamReaderResponse
                 }
             }
-        } else {
-            $httpErrorObj.ErrorDetails = $ErrorObject.Exception.Message
-            $httpErrorObj.FriendlyMessage = $ErrorObject.Exception.Message
+        }
+        try {
+            $errorDetailsObject = ($httpErrorObj.ErrorDetails | ConvertFrom-Json)
+            # Make sure to inspect the error result object and add only the error message as a FriendlyMessage.
+            # $httpErrorObj.FriendlyMessage = $errorDetailsObject.message
+            $httpErrorObj.FriendlyMessage = $httpErrorObj.ErrorDetails # Temporarily assignment
+        } catch {
+            $httpErrorObj.FriendlyMessage = $httpErrorObj.ErrorDetails
         }
         Write-Output $httpErrorObj
     }
 }
 #endregion
 
-# Begin
 try {
-    Write-Verbose "Verifying if a Aura account for [$($p.DisplayName)] exists"
+    # Verify if [aRef] has a value
+    if ([string]::IsNullOrEmpty($($actionContext.References.Account))) {
+        throw 'The account reference could not be found'
+    }
 
-    # Get Get-Aura Authentication Cookie
     $cookieResponse = Get-AuraAuthenticationCookie
-
-    # Add Cookie To WebRequest Session
     $WebSession = Add-CookieToWebRequestSession  $cookieResponse
 
-    # Get User
-    [xml]$xmlGetUser = '<?xml version="1.0" encoding="utf-8"?>
- <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
-     <soap:Body>
-         <readPersonRequest xmlns="http://www.imsglobal.org/services/pms/xsd/imsPersonManMessSchema_v1p0">
-             <sourcedId>
-                 <identifier xmlns="http://www.imsglobal.org/services/common/imsCommonSchema_v1p0"></identifier>
-             </sourcedId>
-         </readPersonRequest>
-     </soap:Body>
- </soap:Envelope>'
+    Write-Information "Verifying if a Aura account for [$($personContext.Person.DisplayName)] exists"
 
-    $xmlGetUser.Envelope.Body.readPersonRequest.sourcedId.identifier.InnerText = "$($account.userId.userIdValue)"
+    [xml]$xmlGetUser =  '<?xml version="1.0" encoding="utf-8"?>
+    <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+        <soap:Body>
+            <readPersonRequest xmlns="http://www.imsglobal.org/services/pms/xsd/imsPersonManMessSchema_v1p0">
+                <sourcedId>
+                    <identifier xmlns="http://www.imsglobal.org/services/common/imsCommonSchema_v1p0"></identifier>
+                </sourcedId>
+            </readPersonRequest>
+        </soap:Body>
+    </soap:Envelope>'
+
+    $xmlGetUser.Envelope.Body.readPersonRequest.sourcedId.identifier.InnerText = "$($actionContext.References.Account)"
     $splatWebRequest = @{
         Method      = 'POST'
-        Uri         = $config.BaseUrl
+        Uri         = $actionContext.Configuration.BaseUrl
         ContentType = 'text/xml; charset=utf-8'
         Body        = $xmlGetUser.InnerXml
         WebSession  = $WebSession
     }
-    $userResponse = Invoke-RestMethod @splatWebRequest -UseBasicParsing -Verbose:$false
-    $userXmlObject = ([xml]$userResponse).Envelope.Body.readPersonResponse.person
 
-    if (-not [string]::IsNullOrEmpty($userXmlObject.userId.userIdValue.'#text')) {
-        $action = 'Update'
-        $dryRunMessage = "Update Aura account for: [$($p.DisplayName)], will be executed during enforcement"
-    } else {
-        $action = 'NotFound'
-        $dryRunMessage = "Aura account for: [$($p.DisplayName)] not found. Possibily deleted"
+    if (-not  [string]::IsNullOrEmpty($actionContext.Configuration.ProxyAddress)) {
+        $splatWebRequest['Proxy'] = $actionContext.Configuration.ProxyAddress
     }
 
-    # Add an auditMessage showing what will happen during enforcement
-    if ($dryRun -eq $true) {
-        Write-Warning "[DryRun] $dryRunMessage"
+    $userResponse =Invoke-RestMethod @splatWebRequest -UseBasicParsing -Verbose:$false
+    $userXmlObject = ([xml]$userResponse).Envelope.Body.readPersonResponse.person
+    $correlatedAccountID = $userXmlObject.userId.userIdValue.'#text'
+
+    # Always compare the account against the current account in target system
+    if ($null -ne $correlatedAccountID) {
+
+        $CorrelatedAccount =   $userXmlObject  | ConvertTo-AuraAccountFromXML
+        $outputContext.PreviousData = $correlatedAccount
+
+
+        $splatCompareProperties = @{
+            ReferenceObject  = @($correlatedAccount.PSObject.Properties)
+            DifferenceObject = @(([PSCustomObject]$actionContext.Data).PSObject.Properties)
+        }
+        $propertiesChanged = Compare-Object @splatCompareProperties -PassThru | Where-Object { $_.SideIndicator -eq '=>' }
+        if ($propertiesChanged) {
+            $action = 'UpdateAccount'
+            $dryRunMessage = "Account property(s) required to update: $($propertiesChanged.Name -join ', ')"
+        } else {
+            $action = 'NoChanges'
+            $dryRunMessage = 'No changes will be made to the account during enforcement'
+        }
+    } else {
+        $action = 'NotFound'
+        $dryRunMessage = "Aura account for: [$($personContext.Person.DisplayName)] not found. Possibly deleted."
+    }
+
+
+    # Add a message and the result of each of the validations showing what will happen during enforcement
+    if ($actionContext.DryRun -eq $true) {
+        Write-Information "[DryRun] $dryRunMessage"
     }
 
     # Process
-    if (-not($dryRun -eq $true)) {
+    if (-not($actionContext.DryRun -eq $true)) {
         switch ($action) {
-            'Update' {
-                Write-Verbose "Updating Aura account with accountReference: [$aRef]"
+            'UpdateAccount' {
+                Write-Information "Updating Aura account with accountReference: [$($actionContext.References.Account)]"
+
+                $auraUpdateAccount =  [PSCustomObject]$actionContext.Data | Select-Object -Property $propertiesChanged.Name
+                $ImsUpdateAccount = $auraUpdateAccount | ConvertTo-ImsAccountUpdateObject -AccountRef $($actionContext.References.Account)
+
+                # Make sure to test with special characters and if needed; add utf8 encoding.
 
                 [xml]$updateXML = '<?xml version="1.0" encoding="utf-8"?>
                 <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
@@ -371,13 +629,17 @@ try {
                     </soap:Body>
                 </soap:Envelope>'
 
-                $updateXML.Envelope.Body.updatePersonRequest.sourcedId.identifier.InnerText = "$($aRef)"
-
+                $updateXML.Envelope.Body.updatePersonRequest.sourcedId.identifier.InnerText = "$($actionContext.References.Account)"
                 $parentXmlElementPerson = $updateXML.Envelope.Body.updatePersonRequest.AppendChild( $updateXML.CreateElement('person'))
-                $account | Select-Object * -ExcludeProperty ExternalId  | Write-ToAuraXmlDocument -XmlDocument $updateXML -XmlParentElement $parentXmlElementPerson
+
+                $ImsUpdateAccount |  Select-Object *  -ExcludeProperty telArray  | Write-ToAuraXmlDocument -XmlDocument $updateXML -XmlParentElement $parentXmlElementPerson
+                foreach ($tel in $ImsUpdateAccount.telArray) {
+                    $tel | Write-ToAuraXmlDocument -XmlDocument $updateXML -XmlParentElement $parentXmlElementPerson
+                }
+
                 $splatWebRequest = @{
                     Method      = 'POST'
-                    Uri         = $config.BaseUrl
+                    Uri         = $actionContext.Configuration.BaseUrl
                     ContentType = 'text/xml; charset=utf-8'
                     Body        = $updateXML.InnerXml.Replace(' xmlns="">', '>') #Remove empty NameSpace
                     WebSession  = $WebSession
@@ -392,46 +654,51 @@ try {
                     throw $userResponse.Envelope.Header.syncResponseHeaderInfo.statusInfo.description.text.'#text'
                 }
 
-                $success = $true
-                $auditLogs.Add([PSCustomObject]@{
-                        Message = "Update account was successful, AccountReference is: [$aRef]"
-                        IsError = $false
-                    })
+                $outputContext.data = $actionContext.Data
+                $outputContext.Success = $true
+                $outputContext.AuditLogs.Add([PSCustomObject]@{
+                    Message = "Update account was successful, Account property(s) updated: [$($propertiesChanged.name -join ',')]"
+                    IsError = $false
+                })
+                break
+            }
+
+            'NoChanges' {
+                Write-Information "No changes to Aura account with accountReference: [$($actionContext.References.Account)]"
+
+                $outputContext.data = $actionContext.Data
+                $outputContext.Success = $true
+                $outputContext.AuditLogs.Add([PSCustomObject]@{
+                    Message = 'No changes will be made to the account during enforcement'
+                    IsError = $false
+                })
                 break
             }
 
             'NotFound' {
-                $success = $false
-                $auditLogs.Add([PSCustomObject]@{
-                        Message = "Aura account for: [$($p.DisplayName)] not found. Possibily deleted"
-                        IsError = $true
-                    })
+                $outputContext.Success  = $false
+                $outputContext.AuditLogs.Add([PSCustomObject]@{
+                    Message = "Aura account with accountReference: [$($actionContext.References.Account)] could not be found, possibly indicating that it could be deleted, or the account is not correlated"
+                    IsError = $true
+                })
                 break
             }
         }
     }
 } catch {
-    $success = $false
+    $outputContext.Success  = $false
     $ex = $PSItem
     if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
         $($ex.Exception.GetType().FullName -eq 'System.Net.WebException')) {
         $errorObj = Resolve-AuraError -ErrorObject $ex
         $auditMessage = "Could not update Aura account. Error: $($errorObj.FriendlyMessage)"
-        Write-Verbose "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
+        Write-Warning "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
     } else {
         $auditMessage = "Could not update Aura account. Error: $($ex.Exception.Message)"
-        Write-Verbose "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
+        Write-Warning "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
     }
-    $auditLogs.Add([PSCustomObject]@{
+    $outputContext.AuditLogs.Add([PSCustomObject]@{
             Message = $auditMessage
             IsError = $true
         })
-    # End
-} finally {
-    $result = [PSCustomObject]@{
-        Success   = $success
-        Account   = $account
-        Auditlogs = $auditLogs
-    }
-    Write-Output $result | ConvertTo-Json -Depth 10
 }

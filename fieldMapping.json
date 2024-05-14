@@ -1,0 +1,328 @@
+{
+  "Version": "v1",
+  "MappingFields": [
+    {
+      "Name": "LENERSCODE",
+      "Description": "The Unique ID of the borrower",
+      "Type": "Text",
+      "MappingActions": [
+        {
+          "MapForActions": [
+            "Create",
+            "Update"
+          ],
+          "MappingMode": "Field",
+          "Value": "\"Person.ExternalId\"",
+          "UsedInNotifications": false,
+          "StoreInAccountData": false
+        }
+      ]
+    },
+    {
+      "Name": "VOORN",
+      "Description": "The first name of the borrower",
+      "Type": "Text",
+      "MappingActions": [
+        {
+          "MapForActions": [
+            "Create",
+            "Update"
+          ],
+          "MappingMode": "Field",
+          "Value": "\"Person.Name.GivenName\"",
+          "UsedInNotifications": false,
+          "StoreInAccountData": false
+        }
+      ]
+    },
+    {
+      "Name": "VOORV",
+      "Description": "The prefix of the borrower's name",
+      "Type": "Text",
+      "MappingActions": [
+        {
+          "MapForActions": [
+            "Create",
+            "Update"
+          ],
+          "MappingMode": "Field",
+          "Value": "\"Person.Name.FamilyNamePrefix\"",
+          "UsedInNotifications": false,
+          "StoreInAccountData": false
+        }
+      ]
+    },
+    {
+      "Name": "PASNUMMER",
+      "Description": "The card number of the Aura library card.  Requires special configuration in Aura to be used. otherwise this value is ignored and the LENERSCODE value also used as the card number.",
+      "Type": "Text",
+      "MappingActions": [
+        {
+          "MapForActions": [
+            "Create",
+            "Update"
+          ],
+          "MappingMode": "None",
+          "Value": "\"\"",
+          "UsedInNotifications": false,
+          "StoreInAccountData": false
+        }
+      ]
+    },
+    {
+      "Name": "PLAATS",
+      "Description": "This is the borrower's place of residence",
+      "Type": "Text",
+      "MappingActions": [
+        {
+          "MapForActions": [
+            "Create",
+            "Update"
+          ],
+          "MappingMode": "Field",
+          "Value": "\"Person.Contact.Business.Address.Locality\"",
+          "UsedInNotifications": false,
+          "StoreInAccountData": false
+        }
+      ]
+    },
+    {
+      "Name": "POSTCODE",
+      "Description": "This is the zip code of the borrower's address",
+      "Type": "Text",
+      "MappingActions": [
+        {
+          "MapForActions": [
+            "Create",
+            "Update"
+          ],
+          "MappingMode": "Field",
+          "Value": "\"Person.Contact.Business.Address.PostalCode\"",
+          "UsedInNotifications": false,
+          "StoreInAccountData": false
+        }
+      ]
+    },
+    {
+      "Name": "TELEFOON",
+      "Description": "Telephone (fixed)",
+      "Type": "Text",
+      "MappingActions": [
+        {
+          "MapForActions": [
+            "Create",
+            "Update"
+          ],
+          "MappingMode": "Field",
+          "Value": "\"Person.Contact.Business.Phone.Fixed\"",
+          "UsedInNotifications": false,
+          "StoreInAccountData": false
+        }
+      ]
+    },
+    {
+      "Name": "GSM",
+      "Description": "Telephone (mobile)",
+      "Type": "Text",
+      "MappingActions": [
+        {
+          "MapForActions": [
+            "Create",
+            "Update"
+          ],
+          "MappingMode": "Field",
+          "Value": "\"Person.Contact.Business.Phone.Mobile\"",
+          "UsedInNotifications": false,
+          "StoreInAccountData": false
+        }
+      ]
+    },
+    {
+      "Name": "CC_EMAILADRES",
+      "Description": "This is an additional email address of the borrower, which will be used as a CC email address by Aura Online.",
+      "Type": "Text",
+      "MappingActions": [
+        {
+          "MapForActions": [
+            "Create",
+            "Update"
+          ],
+          "MappingMode": "Field",
+          "Value": "\"Person.Contact.Personal.Email\"",
+          "UsedInNotifications": false,
+          "StoreInAccountData": false
+        }
+      ]
+    },
+    {
+      "Name": "VESTIGING",
+      "Description": "\nIf a media library has multiple locations, this field can be used to indicate to which location a borrower belongs.",
+      "Type": "Text",
+      "MappingActions": [
+        {
+          "MapForActions": [
+            "Create",
+            "Update"
+          ],
+          "MappingMode": "Field",
+          "Value": "\"Person.Location.Name\"",
+          "UsedInNotifications": false,
+          "StoreInAccountData": false
+        }
+      ]
+    },
+    {
+      "Name": "Password",
+      "Description": "The Password of the Mijn AuraSpace account",
+      "Type": "Text",
+      "MappingActions": [
+        {
+          "MapForActions": [
+            "Create",
+            "Update"
+          ],
+          "MappingMode": "None",
+          "Value": "\"\"",
+          "UsedInNotifications": false,
+          "StoreInAccountData": false
+        }
+      ]
+    },
+    {
+      "Name": "EMAILADRES",
+      "Description": "The borrower's email address",
+      "Type": "Text",
+      "MappingActions": [
+        {
+          "MapForActions": [
+            "Create",
+            "Update"
+          ],
+          "MappingMode": "Complex",
+          "Value": "\"function getValue() {\\n  // return Person.Accounts.MicrosoftActiveDirectory.mail\\n   return Person.Contact.Business.Email\\n}\\n\\ngetValue();\"",
+          "UsedInNotifications": false,
+          "StoreInAccountData": false
+        }
+      ]
+    },
+    {
+      "Name": "UserPrincipName",
+      "Description": "The SSO id used by Mijn AuraSpace to identify the Aura user",
+      "Type": "Text",
+      "MappingActions": [
+        {
+          "MapForActions": [
+            "Create",
+            "Update"
+          ],
+          "MappingMode": "Complex",
+          "Value": "\"function getValue() {\\n   // return Person.Accounts.MicrosoftActiveDirectory.UserPrincipalName\\n  return Person.Contact.Business.Email\\n}\\n\\ngetValue();\"",
+          "UsedInNotifications": false,
+          "StoreInAccountData": false
+        }
+      ]
+    },
+    {
+      "Name": "ADRES",
+      "Description": "The street name plus house number of the borrower's address",
+      "Type": "Text",
+      "MappingActions": [
+        {
+          "MapForActions": [
+            "Create",
+            "Update"
+          ],
+          "MappingMode": "Complex",
+          "Value": "\"function getValue() {    \\n    \\n    let returnvalue = Person.Contact.Business.Address.Street + \\\" \\\" + Person.Contact.Business.Address.HouseNumber\\n         + Person.Contact.Business.Address.HouseNumberExt ;\\n    return returnvalue;\\n}\\n\\ngetValue();\"",
+          "UsedInNotifications": false,
+          "StoreInAccountData": false
+        }
+      ]
+    },
+    {
+      "Name": "GEBDATUM",
+      "Description": "This is the borrower's date of birth. Format yyyy-mm-dd",
+      "Type": "Text",
+      "MappingActions": [
+        {
+          "MapForActions": [
+            "Create",
+            "Update"
+          ],
+          "MappingMode": "Complex",
+          "Value": "\"function getValue() {\\n    let Value =  Person.Details.BirthDate.toISOString().split('T')[0]\\n    return Value;\\n}\\n\\ngetValue();\"",
+          "UsedInNotifications": false,
+          "StoreInAccountData": false
+        }
+      ]
+    },
+    {
+      "Name": "GESLACHT",
+      "Description": "This is the gender of the borrower",
+      "Type": "Text",
+      "MappingActions": [
+        {
+          "MapForActions": [
+            "Create",
+            "Update"
+          ],
+          "MappingMode": "Complex",
+          "Value": "\"function getValue() {\\n\\n    let resultValue = \\\"GenderX\\\"\\n    switch (Person.Details.gender)\\n    {\\n        case \\\"M\\\" :\\n            resultValue = \\\"Male\\\"\\n            break;\\n\\n        case \\\"F\\\":\\n        case \\\"V\\\":\\n            resultValue = \\\"Female\\\"\\n            break;\\n    }\\n    return  resultValue ;\\n}\\n\\ngetValue();\"",
+          "UsedInNotifications": false,
+          "StoreInAccountData": false
+        }
+      ]
+    },
+    {
+      "Name": "LENERSNAAM",
+      "Description": "The borrower's last name.",
+      "Type": "Text",
+      "MappingActions": [
+        {
+          "MapForActions": [
+            "Create",
+            "Update"
+          ],
+          "MappingMode": "Field",
+          "Value": "\"Person.Name.FamilyName\"",
+          "UsedInNotifications": false,
+          "StoreInAccountData": false
+        }
+      ]
+    },
+    {
+      "Name": "UITSDATUM",
+      "Description": "The deregistration date of the user. This needs to be in the format ccyymmdd (e.g 20120528). \nStandard practice is to fill this with the current time using complex mapping.",
+      "Type": "Text",
+      "MappingActions": [
+        {
+          "MapForActions": [
+            "Disable"
+          ],
+          "MappingMode": "Complex",
+          "Value": "\"function getValue() {\\n    \\n    var today = new Date();\\n    var dd = String(today.getDate()).padStart(2, '0');\\n    var mm = String(today.getMonth() + 1).padStart(2, '0'); // January is 0!\\n    var yyyy = today.getFullYear();\\n\\n    var todaystr =  yyyy + mm + dd;\\n    return todaystr;\\n}\\n\\ngetValue();\"",
+          "UsedInNotifications": false,
+          "StoreInAccountData": false
+        }
+      ]
+    },
+    {
+      "Name": "KAMERNR",
+      "Description": "This is the student's class or group.\n",
+      "Type": "Text",
+      "MappingActions": [
+        {
+          "MapForActions": [
+            "Create",
+            "Update"
+          ],
+          "MappingMode": "Fixed",
+          "Value": "\"202\"",
+          "UsedInNotifications": false,
+          "StoreInAccountData": false
+        }
+      ]
+    }
+  ],
+  "UniqueFieldNames": []
+}
