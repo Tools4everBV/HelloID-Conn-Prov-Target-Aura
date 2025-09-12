@@ -335,7 +335,7 @@ function ConvertTo-AuraAccountFromXML {
         KAMERNR =           $null
         CC_EMAILADRES =     $null
         VESTIGING =         $null
-        UserPrincipName =    $null
+        UserPrincipName =   $null
         password       =    $null
     }
 
