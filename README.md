@@ -5,12 +5,12 @@
 > This repository contains the connector and configuration code only. The implementer is responsible to acquire the connection details such as username, password, certificate, etc. You might even need to sign a contract or agreement with the supplier before implementing this connector. Please contact the client's application manager to coordinate the connector requirements.
 
 <p align="center">
-  <img src="">
+  <img src="https://github.com/Tools4everBV/HelloID-Conn-Prov-Target-Aura/blob/main/Logo.png?raw=true">
 </p>
 
 ## Table of contents
 
-- [HelloID-Conn-Prov-Target-Aura](#helloid-conn-prov-target-Aura)
+- [HelloID-Conn-Prov-Target-Aura](#helloid-conn-prov-target-aura)
   - [Table of contents](#table-of-contents)
   - [Introduction](#introduction)
   - [Getting started](#getting-started)
@@ -116,9 +116,6 @@ HelloID generates the values of the 'Aura account' by means of the  field mappin
 
 > [!TIP]
 > _For more information on how to configure a HelloID PowerShell connector, please refer to our [documentation](https://docs.helloid.com/en/provisioning/target-systems/powershell-v2-target-systems.html) pages_.
-
-> [!TIP]
->  _If you need help, feel free to ask questions on our [forum](https://forum.helloid.com)_.
 
 ## HelloID docs
 
