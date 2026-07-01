@@ -300,7 +300,7 @@
             "Disable"
           ],
           "MappingMode": "Complex",
-          "Value": "\"function getValue() {\\n    \\n    var today = new Date();\\n    var dd = String(today.getDate()).padStart(2, '0');\\n    var mm = String(today.getMonth() + 1).padStart(2, '0'); // January is 0!\\n    var yyyy = today.getFullYear();\\n\\n    var todaystr =  yyyy + mm + dd;\\n    return todaystr;\\n}\\n\\ngetValue();\"",
+          "Value": "\"function getValue() {\\n    \\n    let today = new Date();\\n    let dd = String(today.getDate()).padStart(2, '0');\\n    let mm = String(today.getMonth() + 1).padStart(2, '0'); // January is 0!\\n    let yyyy = today.getFullYear();\\n\\n    let todaystr =  yyyy + mm + dd;\\n    return todaystr;\\n}\\n\\ngetValue();\"",
           "UsedInNotifications": false,
           "StoreInAccountData": false
         }
