@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com), and this project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.0.3] - 09-07-2026
+- Fixed issue in logging
+- Suppress unnecessary updates
+
 ## [1.0.2] - 01-07-2026
 - Fixed issue [#6](https://github.com/Tools4everBV/HelloID-Conn-Prov-Target-Aura/issues/6)
 - Update README
