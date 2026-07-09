@@ -647,7 +647,7 @@ try {
 
                 $outputContext.Data = $ActionContext.Data
                 $outputContext.AccountReference = $($ImsAccount.userId.userIdValue)
-                $auditLogMessage = "Create account was successful. AccountReference is: [$($outputContext.AccountReference)"
+                $auditLogMessage = "Create account was successful. AccountReference is: [$($outputContext.AccountReference)]"
                 break
             }
 
@@ -657,7 +657,7 @@ try {
                 $outputContext.Data = $userXmlObject | ConvertTo-AuraAccountFromXML
                 $outputContext.AccountReference = $correlatedAccountID
                 $outputContext.AccountCorrelated = $true
-                $auditLogMessage = "Correlated account: [$($correlatedAccount.ExternalId)] on field: [$($correlationField)] with value: [$($correlationValue)]"
+                $auditLogMessage = "Correlated account: [$($personContext.Person.DisplayName)] on field: [$($correlationField)] with value: [$($correlationValue)]"
                 break
             }
         }
