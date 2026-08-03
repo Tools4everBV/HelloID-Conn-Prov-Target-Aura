@@ -585,8 +585,14 @@ try {
 
 
         $splatCompareProperties = @{
-            ReferenceObject  = @($correlatedAccount.PSObject.Properties)
-            DifferenceObject = @(([PSCustomObject]$actionContext.Data).PSObject.Properties)
+            ReferenceObject  = @($correlatedAccount.PSObject.Properties| ForEach-Object {
+                if ($_.Value -is [string] -and $_.Value -eq '') { $_.Value = $null }
+                $_
+            })
+            DifferenceObject = @(([PSCustomObject]$actionContext.Data).PSObject.Properties| ForEach-Object {
+                if ($_.Value -is [string] -and $_.Value -eq '') { $_.Value = $null }
+                $_
+            })
         }
         $propertiesChanged = Compare-Object @splatCompareProperties -PassThru | Where-Object { $_.SideIndicator -eq '=>' }
         if ($propertiesChanged) {
