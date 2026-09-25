@@ -2,6 +2,9 @@
 
 All notable changes to this project will be documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com), and this project adheres to [Semantic Versioning](https://semver.org).
 
+## [1.0.4] - 25-09-2026
+- Update README with concurrent sessions recommendation for Aura internal log file conflicts
+
 ## [1.0.3] - 09-07-2026
 - Fixed issue in logging
 - Suppress unnecessary updates

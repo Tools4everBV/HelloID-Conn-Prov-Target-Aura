@@ -106,7 +106,7 @@ HelloID generates the values of the 'Aura account' by means of the  field mappin
 
 - There is no delete functionality for an account in Aura.  Accounts can however be disabled, by specifiying the  UITSDATUM field. This is implemented in the disable.ps1. Accounts cannot be re-enabled by means of the connector. The UITSDATUM field is only to be used in the disable script and is the only field in that script.
 
-
+- **Concurrent Sessions**: Actions in Aura can fail when an internal log file is already in use. If this occurs, set the HelloID concurrent sessions to `1`.
 
 ## Setup the connector
 
