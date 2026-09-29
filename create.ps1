@@ -20,7 +20,7 @@ function ConvertTo-ChallengeResponseCode {
         $shaObj.Initialize();
 
         $encoder = [System.Text.ASCIIEncoding]::new()
-        $hash = $shaObj.ComputeHash($encoder.GetBytes($challengeResult + "tools4ever" + $actionContext.Configuration.password))
+        $hash = $shaObj.ComputeHash($encoder.GetBytes($challengeResult + $actionContext.Configuration.PartnerKey + $actionContext.Configuration.password))
 
         $shaobj.Clear()
         $challengeResponseCode = [System.String]::Concat(($hash | ForEach-Object {

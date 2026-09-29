@@ -30,7 +30,7 @@ _HelloID-Conn-Prov-Target-Aura_ is a _target_ connector. _Aura_ provides a set o
 
 | Endpoint | Description |
 | -------- | ----------- |
-| https://<yourenvironment.auralibrary>.nl/uPersonManagementServiceSync.asmx |   There is only one endpoint used, the one specified in the BaseUrl, wich is the endpoint that receives all SOAP messages
+| https://<yourenvironment.auralibrary>.nl/uPersonManagementServiceSync.asmx |   There is only one endpoint used, the one specified in the BaseUrl, which is the endpoint that receives all SOAP messages |
 
 
 The following lifecycle actions are available:
@@ -82,10 +82,11 @@ To properly setup the correlation:
 
 The following settings are required to connect to the API.
 
-| Setting  | Description                        | Mandatory |
-| -------- | ---------------------------------- | --------- |
-| Password | The Password to connect to the API | Yes       |
-| BaseUrl  | The URL to the API - https://<yourenvironment.auralibrary>.nl/uPersonManagementServiceSync.asmx                | Yes       |
+| Setting    | Description                                                                                     | Mandatory |
+| ---------- | ----------------------------------------------------------------------------------------------- | --------- |
+| BaseUrl    | The URL to the API - https://<yourenvironment.auralibrary>.nl/uPersonManagementServiceSync.asmx | Yes       |
+| Password   | The Password to connect to the API, customer specific.                                          | Yes       |
+| PartnerKey | The Partner key for the API.                                                                    | Yes       |
 
 ### Prerequisites
 

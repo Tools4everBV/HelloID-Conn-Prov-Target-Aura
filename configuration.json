@@ -11,6 +11,17 @@
     }
   },
   {
+    "key": "PartnerKey",
+    "type": "input",
+    "defaultValue": "",
+    "templateOptions": {
+      "type": "password",
+      "label": "PartnerKey",
+      "description": "The partner key for the API.",
+      "required": true
+    }
+  },
+  {
     "key": "BaseUrl",
     "type": "input",
     "defaultValue": "",
